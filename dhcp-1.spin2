@@ -9,6 +9,7 @@
     See end of file for terms of use.
     --------------------------------------------
 }
+#include "net-common.spin2h"
 
 CON
 
@@ -40,34 +41,40 @@ DAT
 pub main
 
     setup()
-'   rx_demo()
-    tx_demo()
-
-PUB rx_demo() | ptr, len
-
     repeat
-        repeat while ( net.rx_put_cnt() == net.rx_get_cnt() )
-        if net.rx_get_cnt() & 1
-            ptr:= net.rx_buf1()
-        else
-            ptr:= net.rx_buf0()
-        len:= long[ptr] <# 1500
-        ptr+= 4
-        ser.hexdump(ptr, 0, 4, len, 16)
-        net.rx_get_cnt_inc()
+        get_frame()
+        process_ethii()
 
-PUB tx_demo() | try
+PUB get_frame() | ptr, len
 
-    ser.str(@"waiting for link...")
-    repeat try from 1 to 50
-        waitms (100)
-        if net.link_status()
-            ser.strln(@"up")
-            quit
-    net.tx_payld(@example1, 60)
-    repeat while net.tx_busy()
-    ser.hexdump(net.ptr_debug(), 0, 4, 4, 4)
-    repeat
+    repeat while ( net.rx_put_cnt() == net.rx_get_cnt() )
+    
+PUB process_arp() | opcode
+' Process ARP message
+    net.rd_arp_msg()
+    show_arp_msg(net.arp_opcode())
+{    if (net.arp_opcode() == net.ARP_REQ)
+        { if we're currently bound to an IP, and the ARP request is for
+            our IP, send a reply confirming we have it }
+        if ( (_dhcp_state >= BOUND) and (net.arp_target_proto_addr() == _my_ip) )
+            { reply }
+            start_frame()
+            net.ethii_reply()
+            net.arp_reply()
+            send_frame()
+            show_arp_msg(net.arp_opcode())
+}
+PUB process_ethii(): msg_t | ether_t
+' Process Ethernet-II frame
+    net.rd_ethii_frame()
+    ether_t := net.ethii_ethertype()
+    { route to the processor appropriate to the ethertype }
+    if (ether_t == ETYP_ARP)
+    { ARP }
+        process_arp()
+'    elseif (ether_t == ETYP_IPV4)
+'    { IPv4 }
+'        msg_t := process_ipv4()
 
 PUB setup() | i, byte tmp[6]
 
@@ -79,27 +86,6 @@ PUB setup() | i, byte tmp[6]
     show_mac_addr(@"MAC address: ", @_mac_local, string(10, 13))
     net.init(@_txbuff)
     net.startx(BASE)
-
-DAT
-
-    { 60 byte test frames }
-    txData
-    byte    $1c,$39,$47,$1e,$cf,$2c,$00,$04,$a3,$9d,$d7,$dd,$15,$B3,$00,$2C
-    byte    $00,$00,$00,$00,$01,$01,$01,$01,$CC,$CC,$CC,$CC,$0F,$0F,$0F,$0F
-    byte    $00,$00,$00,$00,$01,$01,$01,$01,$CC,$CC,$CC,$CC,$0F,$0F,$0F,$0F
-    byte    $00,$00,$00,$00,$01,$01,$01,$01,$CC,$CC,$CC,$CC,$0F,$0F,$0F,$0F
-
-    example1                                    ' example packet for CRC calculation
-    byte    $00, $B0, $52, $00, $00, $01, $1C, $ED, $6F, $26, $63, $93, $88, $E1, $00, $68
-    byte    $A0, $00, $B0, $52, $68, $AF, $FC, $7F, $00, $00, $00, $00, $00, $00, $00, $00
-    byte    $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    byte    $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $BF, $43, $9E, $52
-
-    example2                                    ' example for broadcast
-    byte    $FF, $FF, $FF, $FF, $FF, $FF, $1C, $ED, $6F, $26, $63, $93, $88, $E1, $00, $00
-    byte    $A0, $00, $B0, $52, $68, $AF, $FC, $7F, $00, $00, $00, $00, $00, $00, $00, $00
-    byte    $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    byte    $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $A4, $F4, $B4, $F4
 
 #include "net-display-utils.spin2"
 

@@ -76,9 +76,10 @@ DAT
 
 VAR
 
+    long _rxlen
     byte _mac_addr[6]
-  byte  cogRx
-  byte  cogTx
+    byte  cogRx
+    byte  cogTx
 
 
 PUB null()
@@ -86,22 +87,23 @@ PUB null()
 
 PUB startx(pinRmii): status
 ' Start using custom IO pins
-  pinMdc  := pinRmii
-  pinTxEn := pinRmii+1
-  pinTxd0 := pinRmii+2
-  pinTxd1 := pinRmii+3
-  pinTxClk:= pinRmii+4
-  pinRxClk:= pinRmii+4
-  pinCrsDv:= pinRmii+5
-  pinRxd0 := pinRmii+6
-  pinRxd1 := pinRmii+7
-  pinMdio := pinRmii+2 ' shared with TXD0
-  smiClkDiv:= clkfreq / 4_000_000 ' 2MHz toggles at 4MHz
-  timeStdIpg:= clkfreq / 1_000_000 ' 100 bits = 1us
-  timeMinIpg:= clkfreq / (100_000_000 / 32) ' 32 bits = 320ns
-  timeStatPoll:= clkfreq / 10 ' 100ms
-  cogTx := coginit (16, @TxEntry, @txBufPtr) + 1
-  cogRx := coginit (16, @RxEntry, @rxPutCnt) + 1
+    pinMdc  := pinRmii
+    pinTxEn := pinRmii+1
+    pinTxd0 := pinRmii+2
+    pinTxd1 := pinRmii+3
+    pinTxClk:= pinRmii+4
+    pinRxClk:= pinRmii+4
+    pinCrsDv:= pinRmii+5
+    pinRxd0 := pinRmii+6
+    pinRxd1 := pinRmii+7
+    pinMdio := pinRmii+2 ' shared with TXD0
+    smiClkDiv:= clkfreq / 4_000_000 ' 2MHz toggles at 4MHz
+    timeStdIpg:= clkfreq / 1_000_000 ' 100 bits = 1us
+    timeMinIpg:= clkfreq / (100_000_000 / 32) ' 32 bits = 320ns
+    timeStatPoll:= clkfreq / 10 ' 100ms
+    cogTx := coginit (16, @TxEntry, @txBufPtr) + 1
+    cogRx := coginit (16, @RxEntry, @rxPutCnt) + 1
+    _ptr_dest := @rxBuffer0
 
 PUB link_status(): s
 
@@ -123,6 +125,10 @@ PUB get_node_address(ptr_mac)
 
     bytemove(ptr_mac, @ownMac, 6)
 
+PUB last_rxlen(): len
+
+    return _rxlen
+
 PUB node_address(ptr_mac)
 
     bytemove(@ownMac, ptr_mac, 6)
@@ -138,6 +144,16 @@ PUB rx_buf0(): p
 PUB rx_buf1(): p
 
     return @rxBuffer1
+
+PUB rx_payload(ptr_buff, nr_bytes)
+
+    if ( rx_get_cnt() & 1 )
+        ptr := rx_buf1()
+    else
+        ptr := rx_buf0()
+    _rxlen := long[ptr] <# 1500
+    ptr += 4
+    rxGetCnt++
 
 PUB tx_payld(ptr_buff, nr_bytes)
 ' Queue a payload and send it immediately
