@@ -1,0 +1,142 @@
+{
+    --------------------------------------------
+    Filename: LAN8720-Demo.spin2
+    Author: Jesse Burt
+    Description: Demo of the LAN8720 driver (P2 version)
+    Copyright (c) 2023
+    Started Jan 16, 2023
+    Updated Jan 16, 2023
+    See end of file for terms of use.
+    --------------------------------------------
+}
+
+CON
+
+    _xtlfreq = 20_000_000
+    _clkfreq = 200_000_000
+
+    BASE    = 16
+    TX_EN   = BASE+1
+    MDIO    = BASE+2
+
+OBJ
+
+  ser: "com.serial.terminal.ansi"
+  net: "net.eth.p2-lan8720a"
+
+VAR
+
+    byte _txbuff[1524]
+
+DAT
+
+  ownMac      byte      $00,$04,$a3,$46,$97,$e1 '$00[6]
+
+
+pub main
+
+    setup()
+'   rxtxtest()
+'   rxdemo()
+    txdemo()
+
+PUB RxTxTest () | ptr, len
+' self test, display MAC, receive and send one packet
+  repeat 50
+    waitms (100)
+    if net.link_Status & %100
+      ser.strln(@"link is up")
+      quit
+  repeat while net.rx_Put_Cnt() == net.rx_Get_Cnt()
+  ptr:= net.rx_buf0()
+  len:= long[ptr] <# 1500
+  ser.hexdump(ptr+4, 0, 4, len, 16)
+  bytemove (@txData+10, @ownMac, 6)
+  net.tx_payld(@txData, 0)
+  repeat while net.tx_busy()
+  ser.hexdump(net.ptr_debug(), 0, 4, 4, 4)
+  repeat
+
+PUB RxDemo () | ptr, len
+
+  repeat
+    repeat while net.rx_put_cnt() == net.rx_get_cnt()
+    if net.rx_Get_Cnt() & 1
+      ptr:= net.rx_buf1()
+    else
+      ptr:= net.rx_buf0()
+    len:= long[ptr] <# 1500
+    ptr+= 4
+    ser.hexdump(ptr, 0, 4, len, 16)
+    net.rx_Get_Cnt_inc()
+
+PUB TxDemo () | try
+
+  ser.str(@"waiting for link...")
+  repeat try from 1 to 50
+    waitms (100)
+'    ser.printf(@"link state: %x (try %d)\n\r", net.link_status(), try)
+    if net.link_status()
+      ser.strln(@"up")
+      quit
+  net.tx_payld(@example1, 60)
+  repeat while net.tx_busy()
+  ser.hexdump(net.ptr_debug(), 0, 4, 4, 4)
+  repeat
+
+PUB setup() | i, byte tmp[6]
+
+    ser.start(2000000)
+    ser.clear()
+    ser.strln(@"Serial terminal started")
+
+    net.node_address(@ownMac)
+    bytefill(@tmp, 0, 6)
+    net.get_node_address(@tmp)
+    ser.str(@"MAC: ")
+    ser.hexdump(@tmp, 0, 4, 6, 6)
+    ser.newline()
+
+    net.init(@_txbuff)
+    net.startx(BASE)
+
+DAT
+
+  txData      'long      60 ' length
+              byte      $1c,$39,$47,$1e,$cf,$2c,$00,$04,$a3,$9d,$d7,$dd,$15,$B3,$00,$2C ' dest MAC, src MAC, type, len
+              byte      $00,$00,$00,$00,$01,$01,$01,$01,$CC,$CC,$CC,$CC,$0F,$0F,$0F,$0F
+              byte      $00,$00,$00,$00,$01,$01,$01,$01,$CC,$CC,$CC,$CC,$0F,$0F,$0F,$0F
+              byte      $00,$00,$00,$00,$01,$01,$01,$01,$CC,$CC,$CC,$CC,$0F,$0F,$0F,$0F
+
+  example1    'long      60 ' example packet for CRC calculation
+        byte $00, $B0, $52, $00, $00, $01, $1C, $ED, $6F, $26, $63, $93, $88, $E1, $00, $68
+        byte $A0, $00, $B0, $52, $68, $AF, $FC, $7F, $00, $00, $00, $00, $00, $00, $00, $00
+        byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $BF, $43, $9E, $52
+
+  example2    'long      60 ' example for broadcast
+        byte $FF, $FF, $FF, $FF, $FF, $FF, $1C, $ED, $6F, $26, $63, $93, $88, $E1, $00, $00
+        byte $A0, $00, $B0, $52, $68, $AF, $FC, $7F, $00, $00, $00, $00, $00, $00, $00, $00
+        byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+        byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $A4, $F4, $B4, $F4
+
+DAT
+{
+Copyright 2023 Jesse Burt
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or
+substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM,
+DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT
+OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+}
+
