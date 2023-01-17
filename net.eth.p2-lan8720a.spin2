@@ -20,23 +20,26 @@ CON
     DOWN        = 0
     UP          = 1
 
-  regControl  = 0  ' basic control
-  regStatus   = 1  ' basic status
-  regID1      = 2  ' Identifier 1
-  regID2      = 3  ' Identifier 2
-  regAutoAdv  = 4  ' auto-negotiation advertisment
-  regAutoAbi  = 5  ' auto-negotiation link partner ability
-  regAutoExp  = 6  ' auto-negotiation expansion
-  regModeCon  = 17 ' mode control/status
-  regSpecMode = 18 ' special modes
-  regErrCnt   = 26 ' symbol error counter
-  regIndic    = 27 ' control status indication
-  regIntSrc   = 29 ' interrupt source
-  regIntMask  = 30 ' interrupt mask
-  regSpecCon  = 31 ' special control/status
+    regControl  = 0  ' basic control
+    regStatus   = 1  ' basic status
+    regID1      = 2  ' Identifier 1
+    regID2      = 3  ' Identifier 2
+    regAutoAdv  = 4  ' auto-negotiation advertisment
+    regAutoAbi  = 5  ' auto-negotiation link partner ability
+    regAutoExp  = 6  ' auto-negotiation expansion
+    regModeCon  = 17 ' mode control/status
+    regSpecMode = 18 ' special modes
+    regErrCnt   = 26 ' symbol error counter
+    regIndic    = 27 ' control status indication
+    regIntSrc   = 29 ' interrupt source
+    regIntMask  = 30 ' interrupt mask
+    regSpecCon  = 31 ' special control/status
 
-  maxBufLong  = 1524/4 + 1
-  pinDebug    = 62
+    MTU_MAX     = 1524
+    maxBufLong  = MTU_MAX/4 + 1
+    pinDebug    = 62
+
+    TXSTART     = 4                             ' start of TX buffer is after the length (long 0)
 
 DAT
   ALIGNL ' hub ram data shared between cogs
@@ -49,7 +52,7 @@ DAT
   linkStatus  long      0       ' bit2=1 if link is up, bit5=1 if auto-negotiation complete
   debugData   long      0[16]
 
-  ownMac      byte      $00[6]
+  _mac_local      byte      $00[6]
   broadcast   byte      $FF[6]
 
 ' To avoid read/write conflicts to hub ram which would make locks neccessary we use two counters.
@@ -73,6 +76,10 @@ DAT
   rxErrCnt    long      0       ' receiver error counter
   rxBuffer0   long      0[maxBufLong]  ' len + 1522 bytes max
   rxBuffer1   long      0[maxBufLong]
+
+OBJ
+
+    crc:    "math.crc"
 
 VAR
 
@@ -103,7 +110,26 @@ PUB startx(pinRmii): status
     timeStatPoll:= clkfreq / 10 ' 100ms
     cogTx := coginit (16, @TxEntry, @txBufPtr) + 1
     cogRx := coginit (16, @RxEntry, @rxPutCnt) + 1
-    _ptr_dest := @rxBuffer0
+
+PUB inet_chksum(ck_st, ck_end, ck_dest): chk | tmp
+
+    chk := crc.inet_chksum(_ptr_dest+4+ck_st, 20, 0)'ck_end-ck_st, 0)
+' ptr, len, pseudohdr chk
+'    chk := crc.inet_chksum(_ptr_dest+4+ck_st, 
+    tmp := fifo_wr_ptr()
+    fifo_set_wr_ptr(4+ck_dest)
+    wrword_msbf(chk)
+    fifo_set_wr_ptr(tmp)
+
+'    bytemove(_ptr_dest+4+ck_dest, @chk, 2)
+
+pub getat(l): c
+
+    return byte[_ptr_dest+4][l]
+
+pub getptr():p
+
+    return _ptr_dest
 
 PUB link_status(): s
 
@@ -123,15 +149,16 @@ PUB rx_get_cnt_inc()
 
 PUB get_node_address(ptr_mac)
 
-    bytemove(ptr_mac, @ownMac, 6)
+    bytemove(ptr_mac, @_mac_local, 6)
 
+PUB pkt_cnt = last_rxlen
 PUB last_rxlen(): len
 
     return _rxlen
 
 PUB node_address(ptr_mac)
 
-    bytemove(@ownMac, ptr_mac, 6)
+    bytemove(@_mac_local, ptr_mac, 6)
 
 PUB ptr_debug(): p
 
@@ -154,6 +181,11 @@ PUB rx_payload(ptr_buff, nr_bytes)
     _rxlen := long[ptr] <# 1500
     ptr += 4
     rxGetCnt++
+
+PUB tx_ena(state)
+
+    if ( state )
+        txBufPtr := _ptr_dest
 
 PUB tx_payld(ptr_buff, nr_bytes)
 ' Queue a payload and send it immediately
