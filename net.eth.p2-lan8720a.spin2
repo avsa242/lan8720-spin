@@ -84,6 +84,7 @@ OBJ
 VAR
 
     long _rxlen
+    word _last_rxptr
     byte _mac_addr[6]
     byte  cogRx
     byte  cogTx
@@ -113,51 +114,71 @@ PUB startx(pinRmii): status
 
 PUB inet_chksum(ck_st, ck_end, ck_dest): chk | tmp
 
-    chk := crc.inet_chksum(_ptr_dest+4+ck_st, 20, 0)'ck_end-ck_st, 0)
-' ptr, len, pseudohdr chk
-'    chk := crc.inet_chksum(_ptr_dest+4+ck_st, 
+    chk := crc.inet_chksum(_txbuff+4+ck_st, 20, 0)
     tmp := fifo_wr_ptr()
     fifo_set_wr_ptr(4+ck_dest)
     wrword_msbf(chk)
     fifo_set_wr_ptr(tmp)
 
-'    bytemove(_ptr_dest+4+ck_dest, @chk, 2)
-
 pub getat(l): c
 
-    return byte[_ptr_dest+4][l]
+    return byte[_txbuff+4][l]
 
 pub getptr():p
 
-    return _ptr_dest
+    return _txbuff
 
-PUB link_status(): s
+PUB payld_ready(): b
 
-    return ((linkStatus & %100) <> 0)
+    return rxPutCnt <> rxGetCnt
+
+PUB phy_link_state(): s
+' Get PHY link state
+'   Returns:
+'       DOWN (0): link is down
+'       UP (1): link is up
+    return ((linkStatus >> 2) & 1)
+
+PUB pkt_cnt(): c
+
+
+pub getstr(): s
+
+    return @rxPutCnt
+
+PUB rxlen(): l
+' Get length of currently queued incoming payload
+    if ( rxGetCnt & 1 )
+        _last_rxptr := @rxBuffer1
+    else
+        _last_rxptr := @rxBuffer0
+
+    return (_rxlen := long[_last_rxptr] <# 1500)
 
 PUB rx_get_cnt(): c
-
-    return rxGetCnt
+' Manually acknowledge receipt of payload
+    rxGetCnt++
 
 PUB rx_put_cnt(): c
 
     return rxPutCnt
 
-PUB rx_get_cnt_inc()
-
-    rxGetCnt++
+PUB rx_err_cnt(): e
+' Receive error total count
+    return rxErrCnt
 
 PUB get_node_address(ptr_mac)
-
+' Get currently set node/MAC address
+'   ptr_mac: pointer to 6-byte array to copy MAC address to
     bytemove(ptr_mac, @_mac_local, 6)
 
-PUB pkt_cnt = last_rxlen
 PUB last_rxlen(): len
-
+' Get length of last received payload
     return _rxlen
 
 PUB node_address(ptr_mac)
-
+' Set this node's MAC address
+'   ptr_mac: pointer to 6-byte MAC address
     bytemove(@_mac_local, ptr_mac, 6)
 
 PUB ptr_debug(): p
@@ -172,26 +193,26 @@ PUB rx_buf1(): p
 
     return @rxBuffer1
 
-PUB rx_payload(ptr_buff, nr_bytes)
+PUB rx_payload(ptr_buff, nr_bytes): ptr
+' Receive payload
+'   ptr_buff: pointer to buffer to copy data to
+'   nr_bytes: number of bytes to copy
+    bytemove(ptr_buff, _last_rxptr+4, nr_bytes <# _rxlen)
+    rxGetCnt++                                  ' acknowledge receipt
 
-    if ( rx_get_cnt() & 1 )
-        ptr := rx_buf1()
-    else
-        ptr := rx_buf0()
-    _rxlen := long[ptr] <# 1500
-    ptr += 4
-    rxGetCnt++
-
+PUB tx_enabled = tx_ena
 PUB tx_ena(state)
-
+' Enable transmission of packets/transmit queued data immediately
+'   Valid values: TRUE (non-zero), FALSE (0)
     if ( state )
-        txBufPtr := _ptr_dest
+        txBufPtr := _txbuff                     ' signal to the PASM engine to send the frame
+    repeat while txBufPtr                       ' wait for it to complete
 
 PUB tx_payld(ptr_buff, nr_bytes)
 ' Queue a payload and send it immediately
-    bytemove(_ptr_dest, @nr_bytes, 4)           ' copy the payload length
-    bytemove(_ptr_dest+4, ptr_buff, nr_bytes)   '   and the payload itself
-    txBufPtr := _ptr_dest                       ' tell the engine a payload is ready
+    bytemove(_txbuff, @nr_bytes, 4)           ' copy the payload length
+    bytemove(_txbuff+4, ptr_buff, nr_bytes)   '   and the payload itself
+    txBufPtr := _txbuff                       ' tell the engine a payload is ready
     repeat while txBufPtr                       ' wait for TX to finish
 
 PUB tx_busy(): p
