@@ -120,17 +120,10 @@ PUB inet_chksum(ck_st, ck_end, ck_dest): chk | tmp
     wrword_msbf(chk)
     fifo_set_wr_ptr(tmp)
 
-pub getat(l): c
-
-    return byte[_txbuff+4][l]
-
-pub getptr():p
-
-    return _txbuff
-
 PUB payld_ready(): b
-
-    return rxPutCnt <> rxGetCnt
+' Flag indicating a newly reveived payload is ready
+'   Returns TRUE (-1) if payload ready
+    return (rxPutCnt <> rxGetCnt)
 
 PUB phy_link_state(): s
 ' Get PHY link state
@@ -138,13 +131,6 @@ PUB phy_link_state(): s
 '       DOWN (0): link is down
 '       UP (1): link is up
     return ((linkStatus >> 2) & 1)
-
-PUB pkt_cnt(): c
-
-
-pub getstr(): s
-
-    return @rxPutCnt
 
 PUB rxlen(): l
 ' Get length of currently queued incoming payload

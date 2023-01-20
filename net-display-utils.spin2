@@ -1,0 +1,65 @@
+PUB mac_addrs_differ(mac1, mac2): d | i
+' Determine if two given MAC addresses differ
+'   mac1, mac2: pointers to two 48-bit/6-byte MAC addresses
+'   Returns:
+'       TRUE (-1) if addresses differ
+'       FALSE (0) if addresses are the same
+    d := false
+    repeat i from 0 to 5
+        if ( byte[mac1][i] <> byte[mac2][i] )
+            return true
+
+PUB mac_addrs_same(mac1, mac2): d | i
+' Determine if two given MAC addresses are the same
+'   mac1, mac2: pointers to two 48-bit/6-byte MAC addresses
+'   Returns:
+'       TRUE (-1) if addresses are the same
+'       FALSE (0) if addresses differ
+    d := true
+    repeat i from 0 to 5
+        if ( byte[mac1][i] <> byte[mac2][i] )
+            return false
+
+PUB show_arp_msg(opcode)
+' Show Wireshark-ish messages about the ARP message received
+    case opcode
+        net.ARP_REQ:
+            show_ip_addr(@"[Who has ", net.arp_target_proto_addr(), @"? Tell ")
+            show_ip_addr(0, net.arp_sender_proto_addr(), string("]", 10, 13))
+        net.ARP_REPL:
+            show_ip_addr(@"[", net.arp_sender_proto_addr(), @" is at ")
+            show_mac_addr(0, net.arp_sender_hw_addr(), string("]", 10, 13))
+
+PUB show_ip_addr(ptr_premsg, addr, ptr_postmsg) | i
+' Display IP address, with optional prefixed/postfixed strings (pass 0 to ignore)
+    if (ptr_premsg)
+        ser.str(ptr_premsg)
+    repeat i from 0 to 3
+        ser.dec(addr.byte[i])
+        if (i < 3)
+            ser.char(".")
+    if (ptr_postmsg)
+        ser.str(ptr_postmsg)
+
+PUB show_mac_addr(ptr_premsg, ptr_addr, ptr_postmsg) | i
+' Display MAC address, with optional prefixed/postfixed strings (pass 0 to ignore)
+    if (ptr_premsg)
+        ser.str(ptr_premsg)
+    repeat i from 0 to 5
+        ser.hexs(byte[ptr_addr][i], 2)
+        if (i < 5)
+            ser.char(":")
+    if (ptr_postmsg)
+        ser.str(ptr_postmsg)
+
+PUB show_mac_oui(ptr_premsg, ptr_addr, ptr_postmsg) | i
+' Display OUI of MAC address, with optional prefixed/postfixed strings (pass 0 to ignore)
+    if (ptr_premsg)
+        ser.str(ptr_premsg)
+    repeat i from 0 to 2
+        ser.hexs(byte[ptr_addr][i], 2)
+        if (i < 2)
+            ser.char(":")
+    if (ptr_postmsg)
+        ser.str(ptr_postmsg)
+
